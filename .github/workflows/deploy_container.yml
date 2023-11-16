@@ -47,8 +47,8 @@ jobs:
         run: |
           echo "User name: $SASL_USERNAME"
           cp client.properties.template client.properties
-          sed -i 's/<usr>/'"$SASL_USERNAME"'/' client.properties
-          sed -i 's/<pass>/'"$SASL_PASSWORD"'/' client.properties
+          sed -i "s|<usr>|$SASL_USERNAME|" client.properties
+          sed -i "s|<pass>|$SASL_PASSWORD|" client.properties
 
       - name: Build, tag, and push image to Amazon ECR
         id: build-image
