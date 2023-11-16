@@ -1,0 +1,188 @@
+# Databricks notebook source
+TEST_MODE = True
+report_ner_classes = ["B-CARDINAL", "B-PERSON", "B-DATE", "B-WORK_OF_ART", "B-ORG"]
+
+# COMMAND ----------
+
+# HIDE SECRETS
+kafka_username = "<usr>"
+kafka_password = "<pass>"
+
+clickhouse_user = "<usr>"
+clickhouse_password = "<pass>"
+
+s3_access_key = "<access_key>"
+s3_secret_key = "<secret_key>"
+
+# COMMAND ----------
+
+# KAFKA
+bootstrap_server = "<server>:9092"
+topic = "wiki_create_trans"
+kafka_sasl_jaas_config = (
+    f'kafkashaded.org.apache.kafka.common.security.plain.PlainLoginModule required username="{kafka_username}" password="{kafka_password}";'
+    ""
+)
+
+# CLICKHOUSE
+jdbc_driver = (
+    "com.clickhouse.jdbc.ClickHouseDriver"  # com.clickhouse.jdbc. ClickHouseDriver
+)
+host = "plcv9xcs6d.us-east-1.aws.clickhouse.cloud"
+port = 8443
+database = "default"
+options = "ssl=true"
+jdbc_url = f"jdbc:clickhouse://{host}:{port}/{database}?{options}&user={clickhouse_user}&password={clickhouse_password}"
+clickhouse_table_name = "wiki_create_nlp"
+
+# COMMAND ----------
+
+from pyspark.sql import functions as F
+from pyspark.sql.types import *
+
+# Configure connections
+if TEST_MODE:
+    spark._jsc.hadoopConfiguration().set("fs.s3a.access.key", s3_access_key)
+    spark._jsc.hadoopConfiguration().set("fs.s3a.secret.key", s3_secret_key)
+    csv_schema = (
+        StructType()
+        .add("key", StringType())
+        .add("value", StringType())
+        .add("topic", StringType())
+        .add("partition", IntegerType())
+        .add("offset", IntegerType())
+        .add("timestamp", TimestampType())
+        .add("timestampType", IntegerType())
+    )
+    df_raw = (
+        sqlContext.read.format("csv")
+        .option("delimiter", ",")
+        .option("header", "true")
+        .schema(csv_schema)
+        .load("s3a://dec-capstone/wiki_create_export.csv")
+    )
+    # df_raw = df_raw.withColumn("key", F.base64(F.col("key")).cast("binary"))
+    df_raw = df_raw.withColumn("value", F.unbase64(F.col("value")).cast("binary"))
+    # df_raw = spark.read.csv("s3a://dec-capstone/wiki_create_export.csv", header=True)
+else:
+    df_raw = (
+        spark.readStream.format("kafka")
+        .option("kafka.bootstrap.servers", bootstrap_server)
+        .option("kafka.security.protocol", "SASL_SSL")
+        .option("kafka.sasl.jaas.config", bootstrap_server)
+        .option("kafka.ssl.endpoint.identification.algorithm", "https")
+        .option("kafka.sasl.mechanism", "PLAIN")
+        .option("subscribe", topic)
+        .option("startingOffsets", "earliest")
+        .option("failOnDataLoss", "false")
+        .load()
+    )
+
+# COMMAND ----------
+
+display(df_raw)
+
+# COMMAND ----------
+
+# Decode and explode kafka messages
+message_schema = (
+    StructType()
+    .add("DATABASE", StringType())
+    .add("PAGE_ID", IntegerType())
+    .add("PAGE_TITLE", StringType())
+    .add("COMMENT", StringType())
+    .add("DOMAIN", StringType())
+    .add("ID", StringType())
+    .add("DATETIME", TimestampType())
+)
+df_decoded = df_raw.select(
+    F.col("timestamp"), F.from_json(F.col("value").cast("string"), message_schema)
+)
+display(df_decoded)
+df_messages = df_raw.select(
+    F.col("timestamp"),
+    F.from_json(F.col("value").cast("string"), message_schema).alias("parsed_value"),
+).select(F.col("timestamp"), F.col("parsed_value.*"))
+display(df_messages)
+
+# COMMAND ----------
+
+import sparknlp
+
+from pyspark.ml import PipelineModel
+from sparknlp.annotator import *
+from sparknlp.base import *
+
+spark = (
+    sparknlp.start()
+)  # for GPU training >> sparknlp.start(gpu = True) # for Spark 2.3 =>> sparknlp.start(spark23 = True)
+
+print("Spark NLP version", sparknlp.version())
+print("Apache Spark version:", spark.version)
+
+spark
+
+# COMMAND ----------
+
+from sparknlp.pretrained import PretrainedPipeline
+
+ner_pipeline = PretrainedPipeline("onto_recognize_entities_sm")
+
+# COMMAND ----------
+
+df_ner_input = df_messages.withColumnRenamed("COMMENT", "text")
+df_ner_result = ner_pipeline.transform(df_ner_input)
+
+# COMMAND ----------
+
+display(df_ner_result)
+
+# COMMAND ----------
+
+df_final = df_ner_result.select(F.col("ID"), F.col("text"), F.col("ner"))
+display(df_final)
+
+# COMMAND ----------
+
+# Explode the 'ner_parsed' column
+df_exploded = df_final.withColumn("ner_exploded", F.explode("ner")).withColumn(
+    "ner_result", F.col("ner_exploded.result")
+)
+
+# COMMAND ----------
+
+display(df_exploded)
+
+# COMMAND ----------
+
+for ner_class in report_ner_classes:
+    df_exploded = df_exploded.withColumn(
+        ner_class, F.when(F.col("ner_result") == ner_class, True).otherwise(False)
+    )
+
+# COMMAND ----------
+
+report_columns = ["ID", "text"] + report_ner_classes
+df_report = df_exploded.select(report_columns)
+df_report = (
+    df_report.groupBy("ID", "text")
+    .agg(
+        *[
+            F.max(F.col(ner_result)).alias(ner_result.replace("B-", "IS_"))
+            for ner_result in report_ner_classes
+        ]
+    )
+    .withColumnRenamed("text", "COMMENT")
+)
+
+# COMMAND ----------
+
+display(df_report)
+
+# COMMAND ----------
+
+df_report.write.format("jdbc").mode("append").option("driver", jdbc_driver).option(
+    "url", jdbc_url
+).option("dbtable", "default.wiki_create_ner").save()
+
+# COMMAND ----------
