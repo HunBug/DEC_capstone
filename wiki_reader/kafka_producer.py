@@ -65,7 +65,6 @@ def produce_events_from_url(
     # log all messages, debug and up
     proc_logger.setLevel(logging.INFO)
     proc_logger.info(f"Producing events from {url} to topic {topic_name}")
-    user_types = {True: "bot", False: "human"}
     producer = Producer(kafka_properties)
     messages_count = 0
 
