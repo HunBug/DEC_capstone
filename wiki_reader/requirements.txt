@@ -1,0 +1,2 @@
+sseclient==0.0.27
+confluent-kafka==2.3.0
