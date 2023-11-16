@@ -1,0 +1,6 @@
+environment="dev"
+repo_name="wikireport"
+aws_region="us-east-1"
+ecr_repo = "dev-wikireport"
+image_tag = "cab58ceb57a07d1606713dc5a65c23ab51d55a1a"
+cluster_arn = "arn:aws:ecs:us-east-1:282824242464:cluster/wikireport-cd"
