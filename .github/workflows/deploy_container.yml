@@ -41,7 +41,11 @@ jobs:
 
       - name: Prepare kafka_client.properties
         working-directory: ./wiki_reader
+        env:
+          SASL_USERNAME: ${{ secrets.SASL_USERNAME }}
+          SASL_PASSWORD: ${{ secrets.SASL_PASSWORD }}
         run: |
+          echo "User name: $SASL_USERNAME"
           cp client.properties.template client.properties
           sed -i 's/<usr>/'"$SASL_USERNAME"'/' client.properties
           sed -i 's/<pass>/'"$SASL_PASSWORD"'/' client.properties
