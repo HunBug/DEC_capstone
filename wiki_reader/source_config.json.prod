@@ -1,0 +1,9 @@
+{
+  "base_url": "https://stream.wikimedia.org/v2/stream/",
+  "streams": {
+
+    "wiki_recentchange": "recentchange",
+    "wiki_delete": "page-delete",
+    "wiki_create": "page-create"
+  }
+}
