@@ -97,7 +97,7 @@ def produce_events_from_url(
 
 
 if __name__ == "__main__":
-    max_events = 10
+    max_events = 10000  # For safety, prevent this from running forever
     messages_count = 0
 
     client_properties = read_ccloud_config(Path("client.properties"))
