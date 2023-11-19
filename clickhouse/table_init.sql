@@ -1,3 +1,5 @@
+-- Case SENSITIVE column names! Confluent/Kafka creates all columns in upper case.
+
 CREATE TABLE wiki_create_trans (
     DATABASE String,
     PAGE_ID UInt32,
@@ -8,13 +10,6 @@ CREATE TABLE wiki_create_trans (
     DATETIME DateTime64
 ) ENGINE = MergeTree ORDER BY (DATABASE, DOMAIN, DATETIME)
 
-Case SENSITIVE column names!!!!!!!!!!!!!! kafka creates all columns in upper case
-
-CREATE TABLE wiki_create_trans (
-    ID String,
-    COMMENT String,
-
-) ENGINE = MergeTree ORDER BY (DATABASE, DOMAIN, DATETIME)
 
 CREATE TABLE wiki_create_ner (
     ID String,

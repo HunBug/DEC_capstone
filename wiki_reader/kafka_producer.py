@@ -1,9 +1,10 @@
-from sseclient import SSEClient
-from confluent_kafka import Producer
 import json
-from pathlib import Path
 import logging
 import multiprocessing
+from pathlib import Path
+
+from confluent_kafka import Producer
+from sseclient import SSEClient
 
 
 def construct_event(event_data, user_types):
