@@ -1,8 +1,9 @@
-from confluent_kafka import Consumer
-from pathlib import Path
-import csv
 import base64
+import csv
 import time
+from pathlib import Path
+
+from confluent_kafka import Consumer
 
 
 def encode_base64(data):
